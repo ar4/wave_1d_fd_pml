@@ -6,7 +6,7 @@ from deap import tools
 from deap import algorithms
 from wave_1d_fd_pml import propagators, test_wave_1d_fd_pml
 
-def find_profile(profile_len, profile_max=1000, v=1500, freq=25, pop_len=500, ngen=50):
+def find_profile(profile_len, profile_max=1000, v=1500, freq=25, nsteps=100, pop_len=500, ngen=50):
 
     creator.create("FitnessMax", base.Fitness, weights=(-1.0,))
     creator.create("Individual", list, fitness=creator.FitnessMax)
@@ -16,7 +16,7 @@ def find_profile(profile_len, profile_max=1000, v=1500, freq=25, pop_len=500, ng
     toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attribute, n=profile_len)
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
-    def model_const(nsteps=None):
+    def model_const(nsteps):
         """Create a constant model."""
         N = 9
         sx = 5
@@ -24,21 +24,23 @@ def find_profile(profile_len, profile_max=1000, v=1500, freq=25, pop_len=500, ng
         max_vel = v
         dx = 5
         dt = 0.001
-        if nsteps is None:
-            nsteps = 100
         source = test_wave_1d_fd_pml.ricker(freq, nsteps, dt, 0.05)
         return {'model': model, 'dx': dx, 'dt': dt, 'nsteps': nsteps,
                 'sources': np.array([source]), 'sx': np.array([sx])}
 
     def evaluate(individual):
-        model = model_const()
+        model = model_const(nsteps)
         v = propagators.Pml(model['model'], model['dx'], model['dt'], profile_len, profile=profile_max*np.array(individual))
         y = v.steps(model['nsteps'], model['sources'], model['sx'])
-        return (np.sum(np.abs(v.current_wavefield)+np.abs(v.current_phi)),)
+        if np.all(np.isfinite(v.current_wavefield)) and np.all(np.isfinite(v.current_phi)):
+            return (np.sum(np.abs(v.current_wavefield)+np.abs(v.current_phi)),)
+        else:
+            return (np.inf,)
 
     def myMut(ind1):
         mutant = toolbox.clone(ind1)
         ind2, = tools.mutGaussian(mutant, mu=0.0, sigma=0.2, indpb=0.2)
+        ind2[:] = np.abs(ind2[:])
         del mutant.fitness.values
         return (ind2,)
 

@@ -1,7 +1,7 @@
 """Test the propagators."""
 import pytest
 import numpy as np
-from wave_1d_fd_abc.propagators import (Pml)
+from wave_1d_fd_pml.propagators import (Pml)
 
 def ricker(freq, length, dt, peak_time):
     """Return a Ricker wavelet with the specified central frequency."""
