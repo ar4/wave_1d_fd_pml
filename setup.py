@@ -1,7 +1,7 @@
 from setuptools import setup, Extension
 import numpy.distutils.core
 
-pml = numpy.distutils.core.Extension(name='wave_1d_fd_pml.pml', sources=['wave_1d_fd_pml/pml.f90'], extra_f90_compile_args=['-O0', '-march=native', '-g', '-W', '-Wall', '-Wextra', '-pedantic', '-fbounds-check'])
+pml = numpy.distutils.core.Extension(name='wave_1d_fd_pml.pml', sources=['wave_1d_fd_pml/pml.f90'], extra_f90_compile_args=['-Ofast', '-march=native', '-g', '-W', '-Wall', '-Wextra', '-pedantic'])#, '-fbounds-check'])
 
 numpy.distutils.core.setup(
         name='wave_1d_fd_pml',
