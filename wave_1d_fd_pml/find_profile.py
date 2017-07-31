@@ -25,7 +25,7 @@ def model_const(nsteps, v, freq, N=9):
 def evaluate(individual, profile, models):
     modelsum = 0.0
     for model in models:
-        v = propagators.Pml(model['model'], model['dx'], model['dt'], len(individual), profile=profile(individual))
+        v = propagators.Pml(model['model'], model['dx'], model['dt'], len(profile(individual)), profile=profile(individual))
         y = v.steps(model['nsteps'], model['sources'], model['sx'])
         if np.all(np.isfinite(v.current_wavefield)) and np.all(np.isfinite(v.current_phi)):
             modelsum += np.sum(np.abs(v.current_wavefield)+np.abs(v.current_phi))
@@ -119,7 +119,7 @@ def find_profile3(profile_len, profile_max=5000, vs=[1500], freqs=[25], Ns=[9], 
     print("global minimum: xmin = {0}, f(xmin) = {1}".format(ret.x, ret.fun))
 
 
-def find_profile_linear(profile_len, intercept_bounds=[5000, 5000], slope_bounds=[-500, 500], vs=[1500], maxiter=5000):
+def find_profile_linear(profile_len, intercept_bounds=[-5000, 5000], slope_bounds=[-500, 500], vs=[1500], maxiter=5000):
 
     models = []
     for v0 in vs:
@@ -128,8 +128,9 @@ def find_profile_linear(profile_len, intercept_bounds=[5000, 5000], slope_bounds
 
     profile = lambda x: x[0] + x[1] * np.arange(profile_len)
     cost = lambda x: evaluate(x, profile, models)[0]
+    bounds=((intercept_bounds[0], intercept_bounds[1]), (slope_bounds[0], slope_bounds[1]))
     # Running the optimization computation
-    ret = hygsa(func, profile(0, 100), maxiter=maxiter, bounds=(intercept_bounds, slope_bounds))
+    ret = hygsa(cost, np.array([0, 100]), maxiter=maxiter, bounds=(intercept_bounds, slope_bounds))
     # Showing results
     print("global minimum: xmin = {0}, f(xmin) = {1}".format(ret.x, ret.fun))
     return ret.x, profile(ret.x)
