@@ -18,38 +18,38 @@ def green(x0, x1, dx, dt, t, v, v0, f):
     return y
 
 @pytest.fixture
-def model_one(nsteps=None):
+def model_one(nsteps=None, v0=1500, v1=2500, freq=25):
     """Create a model with one reflector, and the expected wavefield."""
     N = 100
     rx = int(N/2)
-    model = np.ones(N, dtype=np.float32) * 1500
-    model[rx:] = 2500
-    max_vel = 2500
+    model = np.ones(N, dtype=np.float32) * v0
+    model[rx:] = v1
+    max_vel = v1
     dx = 5
-    dt = 0.001
+    dt = 0.0006
     if nsteps is None:
         nsteps = np.ceil(0.27/dt).astype(np.int)
-    source = ricker(25, nsteps, dt, 0.05)
+    source = ricker(freq, nsteps, dt, 0.05)
     sx = 35
     expected = np.zeros(N)
     # create a new source shifted by the time to the reflector
-    time_shift = np.round((rx-sx)*dx / 1500 / dt).astype(np.int)
+    time_shift = np.round((rx-sx)*dx / v0 / dt).astype(np.int)
     shifted_source = np.pad(source, (time_shift, 0), 'constant')
     # reflection and transmission coefficients
-    r = (2500 - 1500) / (2500 + 1500)
+    r = (v1 - v0) / (v1 + v0)
     t = 1 + r
 
     # direct wave
     expected[:rx] = np.array([green(x*dx, sx*dx, dx, dt,
-                                    (nsteps+1)*dt, 1500, 1500,
+                                    (nsteps+1)*dt, v0, v0,
                                     source) for x in range(rx)])
     # reflected wave
     expected[:rx] += r*np.array([green(x*dx, (rx-1)*dx, dx, dt,
-                                       (nsteps+1)*dt, 1500, 1500,
+                                       (nsteps+1)*dt, v0, v0,
                                        shifted_source) for x in range(rx)])
     # transmitted wave
     expected[rx:] = t*np.array([green(x*dx, rx*dx, dx, dt,
-                                      (nsteps+1)*dt, 2500, 1500,
+                                      (nsteps+1)*dt, v1, v0,
                                       shifted_source) for x in range(rx, N)])
     return {'model': model, 'dx': dx, 'dt': dt, 'nsteps': nsteps,
             'sources': np.array([source]), 'sx': np.array([sx]),

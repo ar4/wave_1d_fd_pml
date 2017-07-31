@@ -161,14 +161,27 @@ contains
     phi_x = first_x_deriv(phi, i, dx)
     sigma_x = first_x_deriv(sigma, i, dx)
 
+! Mine
+!    ! (9)
+!    fp(i) = model_padded(i)**2 * dt**2 / (1 + dt * sigma(i)/2)         &
+!            * (f_xx - (sigma_x * phi(i) + sigma(i) * phi_x))           &
+!            + dt * sigma(i) * fp(i) / (2 + dt * sigma(i))              &
+!            + 1 / (1 + dt * sigma(i) / 2) * (2 * f(i) - fp(i))
+!
+!    ! (10)
+!    phip(i) =  dt * f_x + phi(i) - dt * sigma(i)*phi(i)
+
+! PySIT
     ! (9)
     fp(i) = model_padded(i)**2 * dt**2 / (1 + dt * sigma(i)/2)         &
-            * (f_xx - (sigma_x * phi(i) + sigma(i) * phi_x))           &
+            * (f_xx + phi_x)                                           &
             + dt * sigma(i) * fp(i) / (2 + dt * sigma(i))              &
             + 1 / (1 + dt * sigma(i) / 2) * (2 * f(i) - fp(i))
 
     ! (10)
-    phip(i) =  dt * f_x + phi(i) - dt * sigma(i)*phi(i)
+    phip(i) =  -sigma(i) * dt * f_x + phi(i) - dt * sigma(i) * phi(i)
+
+
 
   end subroutine fd_pml
 
