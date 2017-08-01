@@ -6,7 +6,7 @@ contains
 
   subroutine step(f1, f2, phi1, phi2, sigma,                           &
       model_padded, dt, dx, sources, sources_x, num_steps, pml_width,  &
-      pad_width)
+      pad_width, opt_pml_version)
 
     real, intent (in out), dimension (:) :: f1
     real, intent (in out), dimension (:) :: f2
@@ -21,20 +21,28 @@ contains
     integer, intent (in) :: num_steps
     integer, intent (in) :: pml_width
     integer, intent (in) :: pad_width
+    integer, intent (in), optional :: opt_pml_version
 
     integer :: step_idx
     logical :: even
+    integer :: pml_version
+
+    if (present (opt_pml_version)) then
+      pml_version = opt_pml_version
+    else
+      pml_version = 1
+    end if
 
     do step_idx = 1, num_steps
     even = (mod (step_idx, 2) == 0)
     if (even) then
       call one_step(f2, f1, phi2, phi1, sigma,                         &
         model_padded, dt, dx, sources, sources_x, step_idx, pml_width, &
-        pad_width)
+        pad_width, pml_version)
     else
       call one_step(f1, f2, phi1, phi2, sigma,                         &
         model_padded, dt, dx, sources, sources_x, step_idx, pml_width, &
-        pad_width)
+        pad_width, pml_version)
     end if
     end do
 
@@ -43,7 +51,7 @@ contains
 
   subroutine one_step(f, fp, phi, phip, sigma,                         &
       model_padded, dt, dx, sources, sources_x, step_idx, pml_width,   &
-      pad_width)
+      pad_width, pml_version)
 
     real, intent (in out), dimension (:) :: f
     real, intent (in out), dimension (:) :: fp
@@ -58,6 +66,7 @@ contains
     integer, intent (in) :: step_idx
     integer, intent (in) :: pml_width
     integer, intent (in) :: pad_width
+    integer, intent (in) :: pml_version
 
     integer :: i
     integer :: nx_padded
@@ -68,7 +77,14 @@ contains
 
     ! Propagate
     do i = pad_width + 1, nx_padded - pad_width
-    call fd_pml(f, fp, phi, phip, sigma, model_padded, dt, dx, i)
+    if (pml_version == 1) then
+      call fd_pml1(f, fp, phi, phip, sigma, model_padded, dt, dx, i)
+    else if (pml_version == 2) then
+      call fd_pml2(f, fp, phi, phip, sigma, model_padded, dt, dx, i)
+    else
+      print *, 'unknown pml_version'
+      stop 1
+    end if
     end do
 
     ! source term
@@ -80,7 +96,7 @@ contains
   end subroutine one_step
 
   
-  subroutine fd_pml(f, fp, phi, phip, sigma, model_padded, dt, dx, i)
+  subroutine fd_pml1(f, fp, phi, phip, sigma, model_padded, dt, dx, i)
 
     real, intent (in), dimension (:) :: f
     real, intent (in out), dimension (:) :: fp
@@ -161,29 +177,51 @@ contains
     phi_x = first_x_deriv(phi, i, dx)
     sigma_x = first_x_deriv(sigma, i, dx)
 
-! Mine
-!    ! (9)
-!    fp(i) = model_padded(i)**2 * dt**2 / (1 + dt * sigma(i)/2)         &
-!            * (f_xx - (sigma_x * phi(i) + sigma(i) * phi_x))           &
-!            + dt * sigma(i) * fp(i) / (2 + dt * sigma(i))              &
-!            + 1 / (1 + dt * sigma(i) / 2) * (2 * f(i) - fp(i))
-!
-!    ! (10)
-!    phip(i) =  dt * f_x + phi(i) - dt * sigma(i)*phi(i)
-
-! PySIT
     ! (9)
+    fp(i) = model_padded(i)**2 * dt**2 / (1 + dt * sigma(i)/2)         &
+            * (f_xx - (sigma_x * phi(i) + sigma(i) * phi_x))           &
+            + dt * sigma(i) * fp(i) / (2 + dt * sigma(i))              &
+            + 1 / (1 + dt * sigma(i) / 2) * (2 * f(i) - fp(i))
+
+    ! (10)
+    phip(i) =  dt * f_x + phi(i) - dt * sigma(i)*phi(i)
+
+  end subroutine fd_pml1
+
+
+  subroutine fd_pml2(f, fp, phi, phip, sigma, model_padded, dt, dx, i)
+
+    real, intent (in), dimension (:) :: f
+    real, intent (in out), dimension (:) :: fp
+    real, intent (in), dimension (:) :: phi
+    real, intent (in out), dimension (:) :: phip
+    real, intent (in), dimension (:) :: sigma
+    real, intent (in), dimension (:) :: model_padded
+    real, intent (in) :: dt
+    real, intent (in) :: dx
+    integer, intent (in) :: i
+
+    ! Based on version found in PySIT
+    ! https://github.com/pysit/pysit/blob/master/pysit/solvers/constant_density_acoustic/time/scalar/constant_density_acoustic_time_scalar_1D_4.h
+
+    real :: f_xx
+    real :: f_x
+    real :: phi_x
+    real :: sigma_x
+
+    f_xx = second_x_deriv(f, i, dx)
+    f_x = first_x_deriv(f, i, dx)
+    phi_x = first_x_deriv(phi, i, dx)
+
     fp(i) = model_padded(i)**2 * dt**2 / (1 + dt * sigma(i)/2)         &
             * (f_xx + phi_x)                                           &
             + dt * sigma(i) * fp(i) / (2 + dt * sigma(i))              &
             + 1 / (1 + dt * sigma(i) / 2) * (2 * f(i) - fp(i))
 
-    ! (10)
     phip(i) =  -sigma(i) * dt * f_x + phi(i) - dt * sigma(i) * phi(i)
 
 
-
-  end subroutine fd_pml
+  end subroutine fd_pml2
 
 
   subroutine add_source(fp, model_padded, dt, source, source_x,        &

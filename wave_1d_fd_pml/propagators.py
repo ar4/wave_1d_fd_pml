@@ -55,7 +55,7 @@ class Pml(Propagator):
         self.sigma[:self.pad_width] = self.sigma[self.pad_width]
         self.sigma[-self.pad_width:] = self.sigma[-self.pad_width-1]
 
-    def step(self, num_steps, sources, sources_x):
+    def step(self, num_steps, sources, sources_x, pml_version):
         """Propagate wavefield."""
 
         num_sources = sources.shape[0]
@@ -65,7 +65,7 @@ class Pml(Propagator):
                      self.sigma,
                      self.model_padded, self.dt, self.dx,
                      sources, sources_x, num_steps,
-                     self.abc_width, self.pad_width)
+                     self.abc_width, self.pad_width, pml_version)
 
         if num_steps%2 != 0:
             self.current_wavefield, self.previous_wavefield = \
@@ -75,3 +75,13 @@ class Pml(Propagator):
 
         return self.current_wavefield[self.total_pad: \
                                       self.nx_padded-self.total_pad]
+
+
+class Pml1(Pml):
+    def step(self, num_steps, sources, sources_x):
+        super(Pml1, self).step(num_steps, sources, sources_x, 1)
+
+
+class Pml2(Pml):
+    def step(self, num_steps, sources, sources_x):
+        super(Pml2, self).step(num_steps, sources, sources_x, 2)

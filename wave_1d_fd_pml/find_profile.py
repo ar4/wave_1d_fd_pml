@@ -15,22 +15,21 @@ def model_const(nsteps, v, freq, N=9):
     model = np.ones(N, dtype=np.float32) * v
     max_vel = v
     dx = 5
-    #dt = 0.001
     dt = 0.0006
     source = test_wave_1d_fd_pml.ricker(freq, nsteps, dt, 0.05)
     return {'model': model, 'dx': dx, 'dt': dt, 'nsteps': nsteps,
             'sources': np.array([source]), 'sx': np.array([sx])}
 
 
-def evaluate(individual, profile, models):
+def evaluate(individual, profile, models, propagator):
     modelsum = 0.0
     for model in models:
-        v = propagators.Pml(model['model'], model['dx'], model['dt'], len(profile(individual)), profile=profile(individual))
+        v = propagator(model['model'], model['dx'], model['dt'], len(profile(individual)), profile=profile(individual))
         y = v.steps(model['nsteps'], model['sources'], model['sx'])
         if np.all(np.isfinite(v.current_wavefield)) and np.all(np.isfinite(v.current_phi)):
             modelsum += np.sum(np.abs(v.current_wavefield)+np.abs(v.current_phi))
         else:
-            modelsum += np.inf
+            modelsum += 1e15#np.inf
     return (modelsum,)
 
 def myMut(ind1, toolbox):
@@ -41,7 +40,16 @@ def myMut(ind1, toolbox):
     return (ind2,)
 
 
-def find_profile(profile_len, profile_max=1000, vs=[1500], freqs=[25], nsteps=100, pop_len=500, ngen=50):
+def _get_prop(pml_version):
+    if pml_version == 1:
+        return propagators.Pml1
+    elif pml_version == 2:
+        return propagators.Pml2
+    else:
+        raise ValueError('unknown pml version')
+
+
+def find_profile_freeform_deap(profile_len, profile_max=1000, vs=[1500], freqs=[25], nsteps=100, pop_len=500, ngen=50, pml_version=2):
 
     models = []
     for v in vs:
@@ -59,7 +67,9 @@ def find_profile(profile_len, profile_max=1000, vs=[1500], freqs=[25], nsteps=10
     pool = multiprocessing.Pool()
     toolbox.register("map", pool.map)
 
-    toolbox.register("evaluate", evaluate, lambda x: profile_max * np.array(x), models=models)
+    prop = _get_prop(pml_version)
+
+    toolbox.register("evaluate", evaluate, lambda x: profile_max * np.array(x), models=models, propagator=prop)
     toolbox.register("mate", tools.cxTwoPoint)
     toolbox.register("mutate", myMut, toolbox=toolbox)
     toolbox.register("select", tools.selTournament, tournsize=3)
@@ -98,39 +108,101 @@ def find_profile2(profile_len, profile_max=1000, v=1500, freq=25, nsteps=100):
 
     #return min_out['x']
 
-def find_profile3(profile_len, profile_max=5000, vs=[1500], freqs=[25], Ns=[9], nsteps=100):
+
+def find_profile_freeform(profile_len, bounds=[0, 5000], vs=[1500], maxiter=500, pml_version=2):
 
     models = []
-    #for v in vs:
-    #    for freq in freqs:
-    #        for N in Ns:
-    #            models.append(model_const(nsteps, v, freq, N=N))
     for v0 in vs:
         for v1 in vs:
             models=[test_wave_1d_fd_pml.model_one(500, v0=v0, v1=v1)]
 
-    func = lambda x: evaluate(x, lambda x: profile_max * np.array(x), models)[0]
+    prop = _get_prop(pml_version)
+
+    profile = lambda x: np.array(x)
+    func = lambda x: evaluate(x, profile, models, prop)[0]
     # Setting bounds
-    lw = [0.0] * profile_len
-    up = [1.0] * profile_len
+    lw = [bounds[0]] * profile_len
+    up = [bounds[1]] * profile_len
     # Running the optimization computation
-    ret = hygsa(func, np.linspace(0, 0.2,num=profile_len), maxiter=500000, bounds=(zip(lw, up)))
+    ret = hygsa(func, np.linspace(0, 1000, num=profile_len), maxiter=maxiter, bounds=(zip(lw, up)))
     # Showing results
     print("global minimum: xmin = {0}, f(xmin) = {1}".format(ret.x, ret.fun))
+    return ret.x, profile(ret.x)
 
 
-def find_profile_linear(profile_len, intercept_bounds=[-5000, 5000], slope_bounds=[-500, 500], vs=[1500], maxiter=5000):
+def find_profile_linear(profile_len, intercept_bounds=[0, 5000], slope_bounds=[0, 500], vs=[1500], maxiter=500, pml_version=2):
+    # x0 + x1*x
 
     models = []
     for v0 in vs:
         for v1 in vs:
             models=[test_wave_1d_fd_pml.model_one(500, v0=v0, v1=v1)]
 
+
+    prop = _get_prop(pml_version)
+
     profile = lambda x: x[0] + x[1] * np.arange(profile_len)
-    cost = lambda x: evaluate(x, profile, models)[0]
-    bounds=((intercept_bounds[0], intercept_bounds[1]), (slope_bounds[0], slope_bounds[1]))
+    cost = lambda x: evaluate(x, profile, models, prop)[0]
     # Running the optimization computation
     ret = hygsa(cost, np.array([0, 100]), maxiter=maxiter, bounds=(intercept_bounds, slope_bounds))
+    # Showing results
+    print("global minimum: xmin = {0}, f(xmin) = {1}".format(ret.x, ret.fun))
+    return ret.x, profile(ret.x)
+
+
+def find_profile_linear_brute(profile_len, intercept_bounds=[0, 5000], slope_bounds=[0, 500], vs=[1500], maxiter=500, pml_version=2):
+    # x0 + x1*x
+
+    models = []
+    for v0 in vs:
+        for v1 in vs:
+            models=[test_wave_1d_fd_pml.model_one(500, v0=v0, v1=v1)]
+
+    prop = _get_prop(pml_version)
+
+    profile = lambda x: x[0] + x[1] * np.arange(profile_len)
+    cost = lambda x: evaluate(x, profile, models, prop)[0]
+    # Running the optimization computation
+    N=100
+    ret = scipy.optimize.brute(cost, [slice(intercept_bounds[0], intercept_bounds[1], (intercept_bounds[1] - intercept_bounds[0])/N), slice(slope_bounds[0], slope_bounds[1], (slope_bounds[1]-slope_bounds[0])/N)])
+    # Showing results
+    print("global minimum: xmin = {0}, f(xmin) = {1}".format(ret, cost(ret)))
+    return ret, profile(ret)
+
+
+def find_profile_power(profile_len, intercept_bounds=[0, 5000], slope_bounds=[0,500], power_bounds=[1, 10], vs=[1500], maxiter=500, pml_version=2):
+    # (x0+x1*x)^x2
+
+    models = []
+    for v0 in vs:
+        for v1 in vs:
+            models=[test_wave_1d_fd_pml.model_one(500, v0=v0, v1=v1)]
+
+    prop = _get_prop(pml_version)
+
+    profile = lambda x: (x[0] + x[1] * np.arange(profile_len))**(x[2])
+    cost = lambda x: evaluate(x, profile, models, prop)[0]
+    # Running the optimization computation
+    ret = hygsa(cost, np.array([80, 260, 1]), maxiter=maxiter, bounds=(intercept_bounds, slope_bounds, power_bounds))
+    # Showing results
+    print("global minimum: xmin = {0}, f(xmin) = {1}".format(ret.x, ret.fun))
+    return ret.x, profile(ret.x)
+
+
+def find_profile_cosine(profile_len, bounds=((0, 5000), (-5000, 5000), (0, np.pi/2), (0, np.pi/2)), vs=[1500], maxiter=500, pml_version=2):
+    # x0 + x1*cos(x2:x2+x3)
+
+    models = []
+    for v0 in vs:
+        for v1 in vs:
+            models=[test_wave_1d_fd_pml.model_one(500, v0=v0, v1=v1)]
+
+    prop = _get_prop(pml_version)
+
+    profile = lambda x: x[0] + x[1]*(np.cos(np.linspace(x[2],x[2]+x[3], profile_len))).astype(np.float32)
+    cost = lambda x: evaluate(x, profile, models, prop)[0]
+    # Running the optimization computation
+    ret = hygsa(cost, np.array([1000, -1000, 0, np.pi/2]), maxiter=maxiter, bounds=bounds)
     # Showing results
     print("global minimum: xmin = {0}, f(xmin) = {1}".format(ret.x, ret.fun))
     return ret.x, profile(ret.x)
