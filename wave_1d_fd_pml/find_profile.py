@@ -9,12 +9,11 @@ from wave_1d_fd_pml import propagators, test_wave_1d_fd_pml
 import scipy.optimize
 from hygsa import hygsa
 
-def model_const(nsteps, v, freq, N=9):
+def model_const(nsteps, v, freq, dx=5, N=9):
     """Create a constant model."""
     sx = int(N/2) + 1
     model = np.ones(N, dtype=np.float32) * v
     max_vel = v
-    dx = 5
     dt = 0.0006
     source = test_wave_1d_fd_pml.ricker(freq, nsteps, dt, 0.05)
     return {'model': model, 'dx': dx, 'dt': dt, 'nsteps': nsteps,
@@ -26,10 +25,11 @@ def evaluate(individual, profile, models, propagator):
     for model in models:
         v = propagator(model['model'], model['dx'], model['dt'], len(profile(individual)), profile=profile(individual))
         y = v.steps(model['nsteps'], model['sources'], model['sx'])
-        if np.all(np.isfinite(v.current_wavefield)) and np.all(np.isfinite(v.current_phi)):
+        ninf = np.sum(~np.isfinite(v.current_wavefield)) + np.sum(~np.isfinite(v.current_phi))
+        if ninf == 0:
             modelsum += np.sum(np.abs(v.current_wavefield)+np.abs(v.current_phi))
         else:
-            modelsum += 1e15#np.inf
+            modelsum += 1e15 * ninf#np.inf
     return (modelsum,)
 
 def myMut(ind1, toolbox):
@@ -88,27 +88,6 @@ def find_profile_freeform_deap(profile_len, profile_max=1000, vs=[1500], freqs=[
     return hof[0]
 
 
-def find_profile2(profile_len, profile_max=1000, v=1500, freq=25, nsteps=100):
-    
-    model = model_const(nsteps, v, freq)
-
-    def func(x):
-        return evaluate(x, lambda x: profile_max * np.array(x), [model])[0]
-
-    #brute_out = scipy.optimize.brute(func, [(0, 1)]*profile_len, Ns=20, finish=None, disp=True)
-    #brute_out = scipy.optimize.brute(func, [slice(0, 1, 0.01)]*profile_len, finish=None, disp=True)
-    #brute_out = scipy.optimize.differential_evolution(func, [(0.0,1.0)]*profile_len, polish=False, disp=True)
-    brute_out = scipy.optimize.basinhopping(func, [0.0]*profile_len, T=0.05, stepsize=0.01, disp=True)
-    print('brute_out', brute_out)
-    return brute_out.fun
-    #brute_out = brute_out['x']
-    #min_out = scipy.optimize.minimize(func, profile, method='Nelder-Mead', tol=1e-16)#, options={'disp': True})
-    #print(min_out)
-    #print('min_out', min_out['fun'])
-
-    #return min_out['x']
-
-
 def find_profile_freeform(profile_len, bounds=[0, 5000], vs=[1500], maxiter=500, pml_version=2):
 
     models = []
@@ -130,13 +109,15 @@ def find_profile_freeform(profile_len, bounds=[0, 5000], vs=[1500], maxiter=500,
     return ret.x, profile(ret.x)
 
 
-def find_profile_linear(profile_len, intercept_bounds=[0, 5000], slope_bounds=[0, 500], vs=[1500], maxiter=500, pml_version=2):
+def find_profile_linear(profile_len, intercept_bounds=[0, 5000], slope_bounds=[0, 500], vs=[1500], maxiter=500, pml_version=2, dx=5):
     # x0 + x1*x
 
+    dt = 0.0006 * dx / 5
+    nsteps = int(500 * 0.0006 / dt)
     models = []
     for v0 in vs:
         for v1 in vs:
-            models=[test_wave_1d_fd_pml.model_one(500, v0=v0, v1=v1)]
+            models=[test_wave_1d_fd_pml.model_one(nsteps, v0=v0, v1=v1, dx=dx, dt=dt)]
 
 
     prop = _get_prop(pml_version)
