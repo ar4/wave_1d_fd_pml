@@ -18,9 +18,8 @@ def green(x0, x1, dx, dt, t, v, v0, f):
     return y
 
 @pytest.fixture
-def model_one(nsteps=None, v0=1500, v1=2500, freq=25, dx=5, dt=0.0006):
+def model_one(nsteps=None, v0=1500, v1=2500, freq=25, dx=5, dt=0.0006, N=100):
     """Create a model with one reflector, and the expected wavefield."""
-    N = 100
     rx = int(N/2)
     model = np.ones(N, dtype=np.float32) * v0
     model[rx:] = v1
@@ -28,7 +27,7 @@ def model_one(nsteps=None, v0=1500, v1=2500, freq=25, dx=5, dt=0.0006):
     if nsteps is None:
         nsteps = np.ceil(0.27/dt).astype(np.int)
     source = ricker(freq, nsteps, dt, 0.05)
-    sx = 35
+    sx = int(.35 * N)
     expected = np.zeros(N)
     # create a new source shifted by the time to the reflector
     time_shift = np.round((rx-sx)*dx / v0 / dt).astype(np.int)
