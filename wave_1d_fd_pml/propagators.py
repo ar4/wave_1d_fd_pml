@@ -58,8 +58,6 @@ class Pml(Propagator):
     def step(self, num_steps, sources, sources_x, pml_version):
         """Propagate wavefield."""
 
-        num_sources = sources.shape[0]
-        source_len = sources.shape[1]
         pml.pml.step(self.current_wavefield, self.previous_wavefield,
                      self.current_phi, self.previous_phi,
                      self.sigma,
