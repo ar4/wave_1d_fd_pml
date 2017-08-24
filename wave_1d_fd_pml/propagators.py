@@ -5,7 +5,7 @@ from wave_1d_fd_pml import pml
 
 class Propagator(object):
     """A finite difference propagator for the 1D wave equation."""
-    def __init__(self, model, dx, dt=None, abc_width=20, pad_width=8):
+    def __init__(self, model, dx, dt=None, abc_width=10, pad_width=8):
         self.nx = len(model)
         self.dx = np.float32(dx)
         self.abc_width = abc_width
@@ -38,7 +38,7 @@ class Propagator(object):
 
 class Pml(Propagator):
     """Perfectly Matched Layer."""
-    def __init__(self, model, dx, dt=None, pml_width=20, profile=None):
+    def __init__(self, model, dx, dt=None, pml_width=10, profile=None):
         super(Pml, self).__init__(model, dx, dt, pml_width)
         self.phi = [np.zeros(self.nx_padded, np.float32),
                     np.zeros(self.nx_padded, np.float32)
@@ -47,7 +47,9 @@ class Pml(Propagator):
         self.previous_phi = self.phi[1]
 
         if profile is None:
-            profile = dx*np.arange(pml_width, dtype=np.float32)
+            profile = 40 + 60 * np.arange(pml_width, dtype=np.float32)
+        else:
+            pml_width = len(profile)
 
         self.sigma = np.zeros(self.nx_padded, np.float32)
         self.sigma[self.total_pad-1:self.pad_width-1:-1] = profile
@@ -57,6 +59,10 @@ class Pml(Propagator):
 
     def step(self, num_steps, sources, sources_x, pml_version):
         """Propagate wavefield."""
+
+        if sources is None:
+            sources = np.zeros([0, 0], np.float32)
+            sources_x = np.zeros([0], np.int)
 
         pml.pml.step(self.current_wavefield, self.previous_wavefield,
                      self.current_phi, self.previous_phi,
@@ -76,10 +82,10 @@ class Pml(Propagator):
 
 
 class Pml1(Pml):
-    def step(self, num_steps, sources, sources_x):
-        super(Pml1, self).step(num_steps, sources, sources_x, 1)
+    def step(self, num_steps, sources=None, sources_x=None):
+        return super(Pml1, self).step(num_steps, sources, sources_x, 1)
 
 
 class Pml2(Pml):
-    def step(self, num_steps, sources, sources_x):
-        super(Pml2, self).step(num_steps, sources, sources_x, 2)
+    def step(self, num_steps, sources=None, sources_x=None):
+        return super(Pml2, self).step(num_steps, sources, sources_x, 2)
