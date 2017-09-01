@@ -1,7 +1,7 @@
 """Test the propagators."""
 import pytest
 import numpy as np
-from wave_1d_fd_pml.propagators import (Pml)
+from wave_1d_fd_pml.propagators import (Pml1, Pml2)
 
 def ricker(freq, length, dt, peak_time):
     """Return a Ricker wavelet with the specified central frequency."""
@@ -75,7 +75,7 @@ def model_two():
 @pytest.fixture
 def versions():
     """Return a list of implementations."""
-    return [Pml]
+    return [Pml2]
 
 def test_one_reflector(model_one, versions):
     """Verify that the numeric and analytic wavefields are similar."""
@@ -85,7 +85,7 @@ def test_one_reflector(model_one, versions):
 
 
 def test_allclose(model_two, versions):
-    """Verify that all implementations produce similar results."""
+    """Verify that wavefield of random model is damped."""
 
     for v in versions:
         _test_version(v, model_two, atol=1.0)
